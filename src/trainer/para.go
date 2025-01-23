@@ -3,20 +3,31 @@ package trainer
 // Bluetooth (FrSKY's PARA trainer protocol) link
 
 import (
+	"encoding/binary"
 	"time"
 
 	"tinygo.org/x/bluetooth"
 )
 
-// Have to send this to master radio on connect otherwise high chance opentx para code will never receive "Connected" message
-// Since it looks for "Connected\r\n" and sometimes(?) bluetooth underlying layer on master radio
-// never sends "\r\n" and starts sending trainer data directly
-var bootBuffer = []byte{0x0d, 0x0a}
+// var serviceUUID = [16]byte{0xa0, 0xb4, 0x00, 0x01, 0x92, 0x6d, 0x4d, 0x61, 0x98, 0xdf, 0x8c, 0x5c, 0x62, 0xee, 0x53, 0xb3}
+var serviceUUID = bluetooth.NewUUID([16]byte{0x61, 0xf4, 0x54, 0x33, 0x79, 0x32, 0x49, 0xda, 0xa7, 0xe8, 0xbb, 0x13, 0x06, 0x04, 0xd5, 0x03})
+var charUUID = [16]byte{0xa0, 0xb4, 0x00, 0x02, 0x92, 0x6d, 0x4d, 0x61, 0x98, 0xdf, 0x8c, 0x5c, 0x62, 0xee, 0x53, 0xb3}
+
+//var suid = []byte("Helloservice!!!!")
+//var cuid = []byte("Hellocharacteris")
+
+// var serviceUUID = [16]byte{suid[0], suid[1], suid[2], suid[3], suid[4], suid[5], suid[6], suid[7], suid[8], suid[9], suid[10], suid[11], suid[12], suid[13], suid[14], suid[15]}
+//var charUUID = [16]byte{cuid[0], cuid[1], cuid[2], cuid[3], cuid[4], cuid[5], cuid[6], cuid[7], cuid[8], cuid[9], cuid[10], cuid[11], cuid[12], cuid[13], cuid[14], cuid[15]}
 
 type Para struct {
-	adapter    *bluetooth.Adapter
-	adv        *bluetooth.Advertisement
-	fff6Handle bluetooth.Characteristic
+	adapter *bluetooth.Adapter
+	adv     *bluetooth.Advertisement
+
+	yprCharacteristicHandle bluetooth.Characteristic
+
+	yCharacteristicHandle bluetooth.Characteristic
+	pCharacteristicHandle bluetooth.Characteristic
+	rCharacteristicHandle bluetooth.Characteristic
 
 	buffer    []byte
 	sendDelay time.Duration
@@ -24,116 +35,90 @@ type Para struct {
 	paired   bool
 	address  string
 	channels [8]uint16
+
+	y uint16
+	p uint16
+	r uint16
 }
 
 func NewPara() *Para {
 	return &Para{
-		adapter:  bluetooth.DefaultAdapter,
-		buffer:   make([]byte, 20),
+		adapter: bluetooth.DefaultAdapter,
+		//buffer:   make([]byte, 20),
 		paired:   false,
 		address:  "B1:6B:00:B5:BA:BE",
 		channels: [8]uint16{1500, 1500, 1500, 1500, 1500, 1500, 1500, 1500},
+		y:        uint16(11),
+		p:        uint16(22),
+		r:        uint16(33),
 	}
 }
 
 func (t *Para) Configure() {
+
 	t.adapter.Enable()
 
-	sysid := bluetooth.CharacteristicConfig{
-		Handle: nil,
-		UUID:   bluetooth.CharacteristicUUIDSystemID,
-		Value:  []byte{0xF1, 0x63, 0x1B, 0xB0, 0x6F, 0x80, 0x28, 0xFE},
-		Flags:  bluetooth.CharacteristicReadPermission,
-	}
-
-	manufacturer := bluetooth.CharacteristicConfig{
-		Handle: nil,
-		UUID:   bluetooth.CharacteristicUUIDManufacturerNameString,
-		Value:  []byte{0x41, 0x70, 0x70},
-		Flags:  bluetooth.CharacteristicReadPermission,
-	}
-
-	ieee := bluetooth.CharacteristicConfig{
-		Handle: nil,
-		UUID:   bluetooth.CharacteristicUUIDIEEE1107320601RegulatoryCertificationDataList,
-		Value:  []byte{0xFE, 0x00, 0x65, 0x78, 0x70, 0x65, 0x72, 0x69, 0x6D, 0x65, 0x6E, 0x74, 0x61, 0x6C},
-		Flags:  bluetooth.CharacteristicReadPermission,
-	}
-
-	pnpid := bluetooth.CharacteristicConfig{
-		Handle: nil,
-		UUID:   bluetooth.CharacteristicUUIDPnPID,
-		Value:  []byte{0x01, 0x0D, 0x00, 0x00, 0x00, 0x10, 0x01},
-		Flags:  bluetooth.CharacteristicReadPermission,
-	}
-
-	t.adapter.AddService(&bluetooth.Service{
-		UUID: bluetooth.ServiceUUIDDeviceInformation,
-		Characteristics: []bluetooth.CharacteristicConfig{
-			sysid, manufacturer, ieee, pnpid,
-		},
-	})
-
-	fff1 := bluetooth.CharacteristicConfig{
-		Handle: nil,
-		UUID:   bluetooth.New16BitUUID(0xFFF1),
-		Value:  []byte{0x01},
-		Flags:  bluetooth.CharacteristicReadPermission | bluetooth.CharacteristicWritePermission,
-	}
-
-	fff2 := bluetooth.CharacteristicConfig{
-		Handle: nil,
-		UUID:   bluetooth.New16BitUUID(0xFFF2),
-		Value:  []byte{0x02},
-		Flags:  bluetooth.CharacteristicReadPermission,
-	}
-
-	fff3 := bluetooth.CharacteristicConfig{
-		Handle: nil,
-		UUID:   bluetooth.New16BitUUID(0xFFF3),
-		Value:  []byte{},
-		Flags:  bluetooth.CharacteristicWriteWithoutResponsePermission,
-	}
-
-	fff5 := bluetooth.CharacteristicConfig{
-		Handle: nil,
-		UUID:   bluetooth.New16BitUUID(0xFFF5),
-		Value:  []byte{},
-		Flags:  bluetooth.CharacteristicReadPermission,
-	}
-
-	fff6 := bluetooth.CharacteristicConfig{
-		Handle: &t.fff6Handle,
-		UUID:   bluetooth.New16BitUUID(0xFFF6),
-		Value:  []byte{},
-		Flags:  bluetooth.CharacteristicWriteWithoutResponsePermission | bluetooth.CharacteristicNotifyPermission,
-	}
-
-	t.adapter.AddService(&bluetooth.Service{
-		UUID: bluetooth.New16BitUUID(0xFFF0),
-		Characteristics: []bluetooth.CharacteristicConfig{
-			fff1, fff2, fff3, fff5, fff6,
-		},
-	})
-
-	t.adv = t.adapter.DefaultAdvertisement()
-	t.adv.Configure(bluetooth.AdvertisementOptions{
-		LocalName:    "Hello",
-		ServiceUUIDs: []bluetooth.UUID{bluetooth.New16BitUUID(0xFFF0)},
-	})
-	t.adv.Start()
-
-	addr, _ := t.adapter.Address()
-	t.address = addr.MAC.String()
-
 	t.adapter.SetConnectHandler(func(device bluetooth.Address, connected bool) {
+		//t.adapter.SetConnectHandler(func(device bluetooth.Device, connected bool) {
 		if connected {
-			t.sendDelay = 1 * time.Second
 			t.paired = true
 		} else {
 			t.paired = false
 		}
 	})
+
+	t.adv = t.adapter.DefaultAdvertisement()
+	t.adv.Configure(bluetooth.AdvertisementOptions{
+		LocalName: "Headtracker",
+
+		//ServiceUUIDs: []bluetooth.UUID{bluetooth.NewUUID(serviceUUID)},
+		//ServiceUUIDs: []bluetooth.UUID{bluetooth.New16BitUUID(0xFFF0)},
+		ServiceUUIDs: []bluetooth.UUID{serviceUUID},
+	})
+	t.adv.Start()
+
+	//var yprCharacteristic bluetooth.Characteristic
+
+	t.adapter.AddService(&bluetooth.Service{
+		//UUID: bluetooth.NewUUID(serviceUUID),
+		UUID: bluetooth.New16BitUUID(0xFFF0),
+		Characteristics: []bluetooth.CharacteristicConfig{
+			/*
+				{
+					Handle: &t.yprCharacteristicHandle,
+					//UUID:   bluetooth.NewUUID(charUUID),
+					UUID:  bluetooth.New16BitUUID(0xFFF1),
+					Value: []byte{0, 0, 0, 0, 0, 0, 0, 0},
+					Flags: bluetooth.CharacteristicReadPermission | bluetooth.CharacteristicNotifyPermission,
+
+				},
+			*/
+
+			{
+				Handle: &t.yCharacteristicHandle,
+				UUID:   bluetooth.New16BitUUID(0xFFF1),
+				Value:  []byte{1, 0},
+				Flags:  bluetooth.CharacteristicReadPermission | bluetooth.CharacteristicNotifyPermission,
+			},
+
+			{
+				Handle: &t.pCharacteristicHandle,
+				UUID:   bluetooth.New16BitUUID(0xFFF2),
+				Value:  []byte{2, 0},
+				Flags:  bluetooth.CharacteristicReadPermission | bluetooth.CharacteristicNotifyPermission,
+			},
+
+			{
+				Handle: &t.rCharacteristicHandle,
+				UUID:   bluetooth.New16BitUUID(0xFFF3),
+				Value:  []byte{3, 0},
+				Flags:  bluetooth.CharacteristicReadPermission | bluetooth.CharacteristicNotifyPermission,
+			},
+		},
+	})
+
+	addr, _ := t.adapter.Address()
+	t.address = addr.MAC.String()
 
 }
 
@@ -144,20 +129,36 @@ func (t *Para) Run() {
 		if !t.paired {
 			continue
 		}
-		if t.sendDelay > 0 {
-			if t.sendDelay == 1*time.Second {
-				setSoftDeviceSystemAttributes() // force enable notify for fff6
-				t.fff6Handle.Write(bootBuffer)  // send '\r\n', it helps remote master switch to receiveTrainer state
+
+		/*
+			numChannels := 8
+			numBytesPerChannel := 2
+			b := make([]byte, numChannels*numBytesPerChannel)
+			for i := 0; i < numChannels; i += 1 {
+				offset := i * 2
+				binary.BigEndian.PutUint16(b[offset:], t.channels[i])
 			}
-			t.sendDelay -= period
-			continue
+			t.yprCharacteristicHandle.Write(b)
+		*/
+
+		{
+			by := make([]byte, 2)
+			binary.BigEndian.PutUint16(by, t.channels[2])
+			t.yCharacteristicHandle.Write(by)
 		}
-		size := t.encode()
-		n, err := t.fff6Handle.Write(t.buffer[:size])
-		if err != nil {
-			println(err.Error())
-			println(n)
+
+		{
+			bp := make([]byte, 2)
+			binary.BigEndian.PutUint16(bp, t.channels[1])
+			t.pCharacteristicHandle.Write(bp)
 		}
+
+		{
+			br := make([]byte, 2)
+			binary.BigEndian.PutUint16(br, t.channels[0])
+			t.rCharacteristicHandle.Write(br)
+		}
+
 	}
 }
 
@@ -175,46 +176,4 @@ func (p *Para) Channels() []uint16 {
 
 func (p *Para) SetChannel(n int, v uint16) {
 	p.channels[n] = v
-}
-
-// -- PARA Protocol ------------------------------------------------------------
-
-// 2 + 8(max 16) + 2
-
-const START_STOP byte = 0x7E
-const BYTE_STUFF byte = 0x7D
-const STUFF_MASK byte = 0x20
-
-// Escapes bytes that equal to START_STOP and updates CRC
-func (t *Para) push(b byte, bufferIndex *byte, crc *byte) {
-	*crc ^= b
-	if b == START_STOP || b == BYTE_STUFF {
-		t.buffer[*bufferIndex] = BYTE_STUFF
-		*bufferIndex++
-		b ^= STUFF_MASK
-	}
-	t.buffer[*bufferIndex] = b
-	*bufferIndex++
-}
-
-// Encodes the channels array to a para trainer packet (adapted from OpenTX source code)
-func (t *Para) encode() byte {
-
-	var bufferIndex byte = 0
-	var crc byte = 0x00
-
-	t.buffer[bufferIndex] = START_STOP
-	bufferIndex++
-	t.push(0x80, &bufferIndex, &crc)
-	for channel := 0; channel < 8; channel += 2 {
-		channelValue1 := t.channels[channel]
-		channelValue2 := t.channels[channel+1]
-		t.push(byte(channelValue1&0x00ff), &bufferIndex, &crc)
-		t.push(byte((channelValue1&0x0f00)>>4)+byte((channelValue2&0x00f0)>>4), &bufferIndex, &crc)
-		t.push(byte((channelValue2&0x000f)<<4)+byte((channelValue2&0x0f00)>>8), &bufferIndex, &crc)
-	}
-	t.buffer[bufferIndex] = crc
-	t.buffer[bufferIndex+1] = START_STOP
-
-	return bufferIndex + 2
 }
