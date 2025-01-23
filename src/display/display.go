@@ -12,7 +12,10 @@ import (
 )
 
 var BLACK = color.RGBA{0, 0, 0, 255}
+
 var WHITE = color.RGBA{255, 255, 255, 255}
+
+//var WHITE = color.RGBA{0, 0, 0, 255}
 
 type Text struct {
 	row     byte
@@ -54,8 +57,11 @@ func (d *Display) Configure() {
 	d.device = ssd1306.NewI2C(machine.I2C0)
 	d.device.Configure(ssd1306.Config{
 		Address: ssd1306.Address_128_32,
-		Width:   128,
-		Height:  32,
+		//Address: ssd1306.Address_64_32,	//Doesn't work
+		Width: 128,
+		//Width:  64,
+		//Height: 32,
+		Height: 64,
 	})
 	d.device.ClearDisplay()
 }
@@ -128,23 +134,56 @@ func (d *Display) Run() {
 	}
 }
 
+/*
 func (d *Display) bars() {
 	if !d.showBars {
 		return
 	}
 	for row, b := range d.Bars {
+		xoffset := int16(32)
+		yoffset := int16(32)
+		origOffset := int16(64 - 32)
+		origOffset = 0
+
 		y := int16(row * 5)
-		tinydraw.FilledRectangle(&d.device, 13, y, 115, 3, BLACK)
+		tinydraw.FilledRectangle(&d.device, 13+xoffset, y+yoffset, 115, 3, BLACK)
 		length := b.value
 		if length < 0 {
-			tinydraw.FilledRectangle(&d.device, 64+length, y, -length, 3, WHITE)
+			tinydraw.FilledRectangle(&d.device, origOffset+length+xoffset, y+yoffset, -length, 3, WHITE)
 			if b.bidir {
-				tinydraw.FilledRectangle(&d.device, 64, y, -length, 3, WHITE)
+				tinydraw.FilledRectangle(&d.device, origOffset+xoffset, y+yoffset, -length, 3, WHITE)
 			}
 		} else {
-			tinydraw.FilledRectangle(&d.device, 64, y, length, 3, WHITE)
+			tinydraw.FilledRectangle(&d.device, origOffset+xoffset, y+yoffset, length, 3, WHITE)
 			if b.bidir {
-				tinydraw.FilledRectangle(&d.device, 64-length, y, length, 3, WHITE)
+				tinydraw.FilledRectangle(&d.device, origOffset-length+xoffset, y+yoffset, length, 3, WHITE)
+			}
+		}
+	}
+}
+*/
+
+func (d *Display) bars() {
+	if !d.showBars {
+		return
+	}
+
+	//xoffset := int16(32)
+	yoffset := int16(32)
+
+	for row, b := range d.Bars {
+		y := int16(row * 5)
+		tinydraw.FilledRectangle(&d.device, 13, y+yoffset, 115, 3, BLACK)
+		length := b.value
+		if length < 0 {
+			tinydraw.FilledRectangle(&d.device, 64+length, y+yoffset, -length, 3, WHITE)
+			if b.bidir {
+				tinydraw.FilledRectangle(&d.device, 64, y+yoffset, -length, 3, WHITE)
+			}
+		} else {
+			tinydraw.FilledRectangle(&d.device, 64, y+yoffset, length, 3, WHITE)
+			if b.bidir {
+				tinydraw.FilledRectangle(&d.device, 64-length, y+yoffset, length, 3, WHITE)
 			}
 		}
 	}
@@ -178,5 +217,14 @@ func toggleColor(c color.RGBA) color.RGBA {
 }
 
 func (d *Display) print(row byte, text string, c color.RGBA) {
-	tinyfont.WriteLineRotated(&d.device, &proggy.TinySZ8pt7b, 14, 12+int16(row)*16, text, c, tinyfont.NO_ROTATION)
+	xoffset := int16(32)
+	yoffset := int16(32)
+
+	//tinyfont.WriteLineRotated(&d.device, &proggy.TinySZ8pt7b, 14, 12+int16(row)*16, text, c, tinyfont.NO_ROTATION)
+	//tinyfont.WriteLineRotated(&d.device, &proggy.TinySZ8pt7b, 0, 12+int16(row)*16, text, c, tinyfont.NO_ROTATION)		//David
+	//tinyfont.WriteLineRotated(&d.device, &proggy.TinySZ8pt7b, 32, 32+12+int16(row)*16, text, c, tinyfont.NO_ROTATION)
+	//tinyfont.WriteLineRotated(&d.device, &proggy.TinySZ8pt7b, offset, offset+12+int16(row)*16, text, c, tinyfont.NO_ROTATION)
+
+	//tinyfont.WriteLineRotated(&d.device, &tinyfont.Tiny3x3a2pt7b, offset, offset+12+int16(row)*16, text, c, tinyfont.NO_ROTATION)
+	tinyfont.WriteLineRotated(&d.device, &proggy.TinySZ8pt7b, xoffset, yoffset+12+int16(row)*16, text, c, tinyfont.NO_ROTATION)
 }
