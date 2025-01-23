@@ -5,7 +5,8 @@ import "machine"
 var (
 	pinResetCenter = machine.D2
 	pinSelectPPM   = machine.D8
-	pinOutputPPM   = machine.D10
+	pinOutputPPM   = machine.D3 //David change
+	//pinOutputPPM   = machine.D10
 )
 
 func initPins() {
