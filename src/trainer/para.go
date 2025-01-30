@@ -49,14 +49,14 @@ func (t *Para) Configure() {
 	manufacturer := bluetooth.CharacteristicConfig{
 		Handle: nil,
 		UUID:   bluetooth.CharacteristicUUIDManufacturerNameString,
-		Value:  []byte{0x41, 0x70, 0x70},
+		Value:  []byte{0x41, 0x70, 0x70}, //App
 		Flags:  bluetooth.CharacteristicReadPermission,
 	}
 
 	ieee := bluetooth.CharacteristicConfig{
 		Handle: nil,
 		UUID:   bluetooth.CharacteristicUUIDIEEE1107320601RegulatoryCertificationDataList,
-		Value:  []byte{0xFE, 0x00, 0x65, 0x78, 0x70, 0x65, 0x72, 0x69, 0x6D, 0x65, 0x6E, 0x74, 0x61, 0x6C},
+		Value:  []byte{0xFE, 0x00, 0x65, 0x78, 0x70, 0x65, 0x72, 0x69, 0x6D, 0x65, 0x6E, 0x74, 0x61, 0x6C}, //"experimental"
 		Flags:  bluetooth.CharacteristicReadPermission,
 	}
 

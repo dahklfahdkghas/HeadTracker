@@ -1,18 +1,11 @@
 package trainer
 
-// Bluetooth (FrSKY's PARA trainer protocol) link
-
 import (
 	"encoding/binary"
 	"time"
 
 	"tinygo.org/x/bluetooth"
 )
-
-// Have to send this to master radio on connect otherwise high chance opentx para code will never receive "Connected" message
-// Since it looks for "Connected\r\n" and sometimes(?) bluetooth underlying layer on master radio
-// never sends "\r\n" and starts sending trainer data directly
-var ble_bootBuffer = []byte{0x0d, 0x0a}
 
 type Ble struct {
 	adapter    *bluetooth.Adapter
@@ -42,79 +35,6 @@ func NewBle() *Ble {
 func (t *Ble) Configure() {
 	t.adapter.Enable()
 
-	sysid := bluetooth.CharacteristicConfig{
-		Handle: nil,
-		UUID:   bluetooth.CharacteristicUUIDSystemID,
-		Value:  []byte{0xF1, 0x63, 0x1B, 0xB0, 0x6F, 0x80, 0x28, 0xFE},
-		Flags:  bluetooth.CharacteristicReadPermission,
-	}
-
-	manufacturer := bluetooth.CharacteristicConfig{
-		Handle: nil,
-		UUID:   bluetooth.CharacteristicUUIDManufacturerNameString,
-		Value:  []byte{0x41, 0x70, 0x70}, //App
-		Flags:  bluetooth.CharacteristicReadPermission,
-	}
-
-	ieee := bluetooth.CharacteristicConfig{
-		Handle: nil,
-		UUID:   bluetooth.CharacteristicUUIDIEEE1107320601RegulatoryCertificationDataList,
-		Value:  []byte{0xFE, 0x00, 0x65, 0x78, 0x70, 0x65, 0x72, 0x69, 0x6D, 0x65, 0x6E, 0x74, 0x61, 0x6C},
-		Flags:  bluetooth.CharacteristicReadPermission,
-	}
-
-	pnpid := bluetooth.CharacteristicConfig{
-		Handle: nil,
-		UUID:   bluetooth.CharacteristicUUIDPnPID,
-		Value:  []byte{0x01, 0x0D, 0x00, 0x00, 0x00, 0x10, 0x01},
-		Flags:  bluetooth.CharacteristicReadPermission,
-	}
-
-	t.adapter.AddService(&bluetooth.Service{
-		UUID: bluetooth.ServiceUUIDDeviceInformation,
-		Characteristics: []bluetooth.CharacteristicConfig{
-			sysid, manufacturer, ieee, pnpid,
-		},
-	})
-
-	/*
-			fff1 := bluetooth.CharacteristicConfig{
-				Handle: nil,
-				UUID:   bluetooth.New16BitUUID(0xFFF1),
-				Value:  []byte{0x01},
-				Flags:  bluetooth.CharacteristicReadPermission | bluetooth.CharacteristicWritePermission,
-			}
-
-			fff2 := bluetooth.CharacteristicConfig{
-				Handle: nil,
-				UUID:   bluetooth.New16BitUUID(0xFFF2),
-				Value:  []byte{0x02},
-				Flags:  bluetooth.CharacteristicReadPermission,
-			}
-
-			fff3 := bluetooth.CharacteristicConfig{
-				Handle: nil,
-				UUID:   bluetooth.New16BitUUID(0xFFF3),
-				Value:  []byte{},
-				Flags:  bluetooth.CharacteristicWriteWithoutResponsePermission,
-			}
-
-			fff5 := bluetooth.CharacteristicConfig{
-				Handle: nil,
-				UUID:   bluetooth.New16BitUUID(0xFFF5),
-				Value:  []byte{},
-				Flags:  bluetooth.CharacteristicReadPermission,
-			}
-
-		fff6 := bluetooth.CharacteristicConfig{
-			Handle: &t.fff6Handle,
-			UUID:   bluetooth.New16BitUUID(0xFFF6),
-			Value:  []byte{},
-			Flags:  bluetooth.CharacteristicWriteWithoutResponsePermission | bluetooth.CharacteristicNotifyPermission,
-		}
-	*/
-
-	// yawPitchRoll_CharConfig
 	yawPitchRoll_CharConfig_fff7 := bluetooth.CharacteristicConfig{
 		Handle: &t.yprCharacteristicHandle,
 		UUID:   bluetooth.New16BitUUID(0xFFF7),
@@ -126,8 +46,6 @@ func (t *Ble) Configure() {
 		UUID: bluetooth.New16BitUUID(0xFFF0),
 		Characteristics: []bluetooth.CharacteristicConfig{
 			yawPitchRoll_CharConfig_fff7,
-			//fff6, yawPitchRoll_CharConfig_fff7,
-			//fff1, fff2, fff3, fff5, fff6, //yawPitchRoll_CharConfig_fff7,
 		},
 	})
 
@@ -149,11 +67,9 @@ func (t *Ble) Configure() {
 			t.paired = false
 		}
 	})
-
 }
 
 func (t *Ble) Run() {
-
 	period := 20 * time.Millisecond
 	for {
 		time.Sleep(period)
@@ -189,46 +105,4 @@ func (p *Ble) Channels() []uint16 {
 
 func (p *Ble) SetChannel(n int, v uint16) {
 	p.channels[n] = v
-}
-
-// -- PARA Protocol ------------------------------------------------------------
-
-// 2 + 8(max 16) + 2
-
-const ble_START_STOP byte = 0x7E
-const ble_BYTE_STUFF byte = 0x7D
-const ble_STUFF_MASK byte = 0x20
-
-// Escapes bytes that equal to ble_START_STOP and updates CRC
-func (t *Ble) push(b byte, bufferIndex *byte, crc *byte) {
-	*crc ^= b
-	if b == ble_START_STOP || b == ble_BYTE_STUFF {
-		t.buffer[*bufferIndex] = ble_BYTE_STUFF
-		*bufferIndex++
-		b ^= ble_STUFF_MASK
-	}
-	t.buffer[*bufferIndex] = b
-	*bufferIndex++
-}
-
-// Encodes the channels array to a Para trainer packet (adapted from OpenTX source code)
-func (t *Ble) encode() byte {
-
-	var bufferIndex byte = 0
-	var crc byte = 0x00
-
-	t.buffer[bufferIndex] = ble_START_STOP
-	bufferIndex++
-	t.push(0x80, &bufferIndex, &crc)
-	for channel := 0; channel < 8; channel += 2 {
-		channelValue1 := t.channels[channel]
-		channelValue2 := t.channels[channel+1]
-		t.push(byte(channelValue1&0x00ff), &bufferIndex, &crc)
-		t.push(byte((channelValue1&0x0f00)>>4)+byte((channelValue2&0x00f0)>>4), &bufferIndex, &crc)
-		t.push(byte((channelValue2&0x000f)<<4)+byte((channelValue2&0x0f00)>>8), &bufferIndex, &crc)
-	}
-	t.buffer[bufferIndex] = crc
-	t.buffer[bufferIndex+1] = ble_START_STOP
-
-	return bufferIndex + 2
 }
