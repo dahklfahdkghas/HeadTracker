@@ -3,7 +3,6 @@ package trainer
 // Bluetooth (FrSKY's PARA trainer protocol) link
 
 import (
-	"encoding/binary"
 	"time"
 
 	"tinygo.org/x/bluetooth"
@@ -18,8 +17,6 @@ type Para struct {
 	adapter    *bluetooth.Adapter
 	adv        *bluetooth.Advertisement
 	fff6Handle bluetooth.Characteristic
-
-	yprCharacteristicHandle bluetooth.Characteristic
 
 	buffer    []byte
 	sendDelay time.Duration
@@ -52,7 +49,7 @@ func (t *Para) Configure() {
 	manufacturer := bluetooth.CharacteristicConfig{
 		Handle: nil,
 		UUID:   bluetooth.CharacteristicUUIDManufacturerNameString,
-		Value:  []byte{0x41, 0x70, 0x70}, //App
+		Value:  []byte{0x41, 0x70, 0x70},
 		Flags:  bluetooth.CharacteristicReadPermission,
 	}
 
@@ -77,63 +74,51 @@ func (t *Para) Configure() {
 		},
 	})
 
-	/*
-			fff1 := bluetooth.CharacteristicConfig{
-				Handle: nil,
-				UUID:   bluetooth.New16BitUUID(0xFFF1),
-				Value:  []byte{0x01},
-				Flags:  bluetooth.CharacteristicReadPermission | bluetooth.CharacteristicWritePermission,
-			}
+	fff1 := bluetooth.CharacteristicConfig{
+		Handle: nil,
+		UUID:   bluetooth.New16BitUUID(0xFFF1),
+		Value:  []byte{0x01},
+		Flags:  bluetooth.CharacteristicReadPermission | bluetooth.CharacteristicWritePermission,
+	}
 
-			fff2 := bluetooth.CharacteristicConfig{
-				Handle: nil,
-				UUID:   bluetooth.New16BitUUID(0xFFF2),
-				Value:  []byte{0x02},
-				Flags:  bluetooth.CharacteristicReadPermission,
-			}
+	fff2 := bluetooth.CharacteristicConfig{
+		Handle: nil,
+		UUID:   bluetooth.New16BitUUID(0xFFF2),
+		Value:  []byte{0x02},
+		Flags:  bluetooth.CharacteristicReadPermission,
+	}
 
-			fff3 := bluetooth.CharacteristicConfig{
-				Handle: nil,
-				UUID:   bluetooth.New16BitUUID(0xFFF3),
-				Value:  []byte{},
-				Flags:  bluetooth.CharacteristicWriteWithoutResponsePermission,
-			}
+	fff3 := bluetooth.CharacteristicConfig{
+		Handle: nil,
+		UUID:   bluetooth.New16BitUUID(0xFFF3),
+		Value:  []byte{},
+		Flags:  bluetooth.CharacteristicWriteWithoutResponsePermission,
+	}
 
-			fff5 := bluetooth.CharacteristicConfig{
-				Handle: nil,
-				UUID:   bluetooth.New16BitUUID(0xFFF5),
-				Value:  []byte{},
-				Flags:  bluetooth.CharacteristicReadPermission,
-			}
+	fff5 := bluetooth.CharacteristicConfig{
+		Handle: nil,
+		UUID:   bluetooth.New16BitUUID(0xFFF5),
+		Value:  []byte{},
+		Flags:  bluetooth.CharacteristicReadPermission,
+	}
 
-		fff6 := bluetooth.CharacteristicConfig{
-			Handle: &t.fff6Handle,
-			UUID:   bluetooth.New16BitUUID(0xFFF6),
-			Value:  []byte{},
-			Flags:  bluetooth.CharacteristicWriteWithoutResponsePermission | bluetooth.CharacteristicNotifyPermission,
-		}
-	*/
-
-	// yawPitchRoll_CharConfig
-	yawPitchRoll_CharConfig_fff7 := bluetooth.CharacteristicConfig{
-		Handle: &t.yprCharacteristicHandle,
-		UUID:   bluetooth.New16BitUUID(0xFFF7),
-		Value:  []byte{1, 2, 3, 4, 5, 6},
-		Flags:  bluetooth.CharacteristicReadPermission | bluetooth.CharacteristicNotifyPermission,
+	fff6 := bluetooth.CharacteristicConfig{
+		Handle: &t.fff6Handle,
+		UUID:   bluetooth.New16BitUUID(0xFFF6),
+		Value:  []byte{},
+		Flags:  bluetooth.CharacteristicWriteWithoutResponsePermission | bluetooth.CharacteristicNotifyPermission,
 	}
 
 	t.adapter.AddService(&bluetooth.Service{
 		UUID: bluetooth.New16BitUUID(0xFFF0),
 		Characteristics: []bluetooth.CharacteristicConfig{
-			yawPitchRoll_CharConfig_fff7,
-			//fff6, yawPitchRoll_CharConfig_fff7,
-			//fff1, fff2, fff3, fff5, fff6, //yawPitchRoll_CharConfig_fff7,
+			fff1, fff2, fff3, fff5, fff6,
 		},
 	})
 
 	t.adv = t.adapter.DefaultAdvertisement()
 	t.adv.Configure(bluetooth.AdvertisementOptions{
-		LocalName:    "Headtracker",
+		LocalName:    "Hello",
 		ServiceUUIDs: []bluetooth.UUID{bluetooth.New16BitUUID(0xFFF0)},
 	})
 	t.adv.Start()
@@ -153,26 +138,27 @@ func (t *Para) Configure() {
 }
 
 func (t *Para) Run() {
-
 	period := 20 * time.Millisecond
 	for {
 		time.Sleep(period)
 		if !t.paired {
 			continue
 		}
-
-		//Convert yaw pitch roll to single byte array
-		numChannels := 3
-		numBytesPerChannel := 2
-		b := make([]byte, numChannels*numBytesPerChannel)
-		for i := 0; i < numChannels; i += 1 {
-			offset := i * 2
-			binary.BigEndian.PutUint16(b[offset:], t.channels[i])
+		if t.sendDelay > 0 {
+			if t.sendDelay == 1*time.Second {
+				setSoftDeviceSystemAttributes() // force enable notify for fff6
+				t.fff6Handle.Write(bootBuffer)  // send '\r\n', it helps remote master switch to receiveTrainer state
+			}
+			t.sendDelay -= period
+			continue
 		}
-		t.yprCharacteristicHandle.Write(b)
-
+		size := t.encode()
+		n, err := t.fff6Handle.Write(t.buffer[:size])
+		if err != nil {
+			println(err.Error())
+			println(n)
+		}
 	}
-
 }
 
 func (p *Para) Paired() bool {
