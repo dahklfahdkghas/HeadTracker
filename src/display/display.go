@@ -8,7 +8,6 @@ import (
 	"tinygo.org/x/drivers/ssd1306"
 	"tinygo.org/x/tinydraw"
 	"tinygo.org/x/tinyfont"
-	"tinygo.org/x/tinyfont/proggy"
 )
 
 var BLACK = color.RGBA{0, 0, 0, 255}
@@ -220,11 +219,8 @@ func (d *Display) print(row byte, text string, c color.RGBA) {
 	xoffset := int16(32)
 	yoffset := int16(32)
 
-	//tinyfont.WriteLineRotated(&d.device, &proggy.TinySZ8pt7b, 14, 12+int16(row)*16, text, c, tinyfont.NO_ROTATION)
-	//tinyfont.WriteLineRotated(&d.device, &proggy.TinySZ8pt7b, 0, 12+int16(row)*16, text, c, tinyfont.NO_ROTATION)		//David
-	//tinyfont.WriteLineRotated(&d.device, &proggy.TinySZ8pt7b, 32, 32+12+int16(row)*16, text, c, tinyfont.NO_ROTATION)
-	//tinyfont.WriteLineRotated(&d.device, &proggy.TinySZ8pt7b, offset, offset+12+int16(row)*16, text, c, tinyfont.NO_ROTATION)
-
-	//tinyfont.WriteLineRotated(&d.device, &tinyfont.Tiny3x3a2pt7b, offset, offset+12+int16(row)*16, text, c, tinyfont.NO_ROTATION)
-	tinyfont.WriteLineRotated(&d.device, &proggy.TinySZ8pt7b, xoffset, yoffset+12+int16(row)*16, text, c, tinyfont.NO_ROTATION)
+	//tinyfont.WriteLineRotated(&d.device, &proggy.TinySZ8pt7b, xoffset, yoffset+12+int16(row)*16, text, c, tinyfont.NO_ROTATION) //Works but too big
+	tinyfont.WriteLineRotated(&d.device, &tinyfont.TomThumb, xoffset, yoffset+12+int16(row)*16, text, c, tinyfont.NO_ROTATION) //Works
+	//tinyfont.WriteLineRotated(&d.device, &freesans.freesans9pt7b, xoffset, yoffset+12+int16(row)*16, text, c, tinyfont.NO_ROTATION) //cant include freesans
+	//tinyfont.WriteLineRotated(&d.device, &freemono.freemono9pt7b, xoffset, yoffset+12+int16(row)*16, text, c, tinyfont.NO_ROTATION)	//cant include freesans
 }

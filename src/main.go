@@ -144,8 +144,10 @@ func main() {
 	// switch display to normal mode
 	d.RemoveText(nil)
 	d.AddText(1, t.Address())
+	//d.AddText(1, strings.Replace(t.Address(), ":", "", -1))
 	if pinSelectPPM.Get() { // high means Bluetooth
-		d.SetTextBlinkFunc(d.AddText(1, "  :  :  :  :  :  "), "", func() bool { return !t.Paired() })
+		//Textblink doesn't work properly with TomThumb font
+		//d.SetTextBlinkFunc(d.AddText(1, "  :  :  :  :  :  "), "", func() bool { return !t.Paired() })
 	}
 
 	// main loop

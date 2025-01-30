@@ -6,9 +6,9 @@ require (
 	github.com/go-gl/mathgl v1.1.0
 	github.com/tracktum/go-ahrs v1.0.0
 	tinygo.org/x/bluetooth v0.8.0
-	tinygo.org/x/drivers v0.27.0
+	tinygo.org/x/drivers v0.29.0
 	tinygo.org/x/tinydraw v0.4.0
-	tinygo.org/x/tinyfont v0.4.0
+	tinygo.org/x/tinyfont v0.5.0
 )
 
 require (
