@@ -49,7 +49,8 @@ func init() {
 	if !pinSelectPPM.Get() { // Low means connected to GND => PPM output requested
 		t = trainer.NewPPM(pinOutputPPM) // PPM wire
 	} else {
-		t = trainer.NewPara()
+		//t = trainer.NewPara()
+		t = trainer.NewBle()
 	}
 
 	// Display
